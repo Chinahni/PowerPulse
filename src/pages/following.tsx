@@ -9,6 +9,7 @@ type FollowedArea = {
   name: string
   status: PowerStatus
   lastUpdated: string
+  followId: string
 }
 
 const initialFollowedAreas: FollowedArea[] = [
@@ -17,12 +18,14 @@ const initialFollowedAreas: FollowedArea[] = [
     name: 'Ikeja',
     status: 'ON',
     lastUpdated: '2 mins ago',
+    followId: 'demo-1',
   },
   {
     id: 'yaba',
     name: 'Yaba',
     status: 'OFF',
     lastUpdated: '15 mins ago',
+    followId: 'demo-2',
   },
 ]
 
@@ -34,44 +37,45 @@ const FollowingPage = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [loadError, setLoadError] = useState<string>('')
 
-  useEffect(() => {
-    const loadFollows = async (): Promise<void> => {
-      setIsLoading(true)
-      setLoadError('')
+  const loadFollows = async (): Promise<void> => {
+    setIsLoading(true)
+    setLoadError('')
 
-      try {
-        const followData = await getFollows()
-        const formatted = followData
-          .map((follow) => follow.area)
-          .filter(Boolean)
-          .map((area) => ({
-            id: String(area.id),
-            name: area.name,
-            status: area.current_status,
-            lastUpdated: area.last_updated ?? 'Recently',
-          }))
+    try {
+      const followData = await getFollows()
+      const formatted = followData
+        .filter((follow) => follow.area)
+        .map((follow) => ({
+          id: String(follow.area.id),
+          name: follow.area.name,
+          status: follow.area.current_status,
+          lastUpdated: follow.area.last_updated ?? 'Recently',
+          followId: String(follow.id ?? ''),
+        }))
 
-        setFollowedAreas(formatted)
-      } catch (error) {
-        console.error(error)
-        setLoadError('Could not load followed areas right now.')
-        setFollowedAreas(initialFollowedAreas)
-      } finally {
-        setIsLoading(false)
-      }
+      setFollowedAreas(formatted)
+    } catch (error) {
+      console.error(error)
+      setLoadError('Could not load followed areas right now.')
+      setFollowedAreas(initialFollowedAreas)
+    } finally {
+      setIsLoading(false)
     }
+  }
 
+  useEffect(() => {
     void loadFollows()
   }, [])
 
-  const handleUnfollow = async (areaId: string): Promise<void> => {
+  const handleUnfollow = async (followId: string): Promise<void> => {
     const previousAreas = followedAreas
     setFollowedAreas((currentAreas) =>
-      currentAreas.filter((area) => area.id !== areaId)
+      currentAreas.filter((area) => area.followId !== followId)
     )
 
     try {
-      await unfollowArea(areaId)
+      await unfollowArea(followId)
+      await loadFollows()
     } catch (error) {
       console.error(error)
       setFollowedAreas(previousAreas)
@@ -147,7 +151,7 @@ const FollowingPage = () => {
 
                     {/* RIGHT */}
                     <button
-                      onClick={() => handleUnfollow(area.id)}
+                      onClick={() => handleUnfollow(area.followId)}
                       className="rounded-xl border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-800 transition hover:bg-green-50"
                     >
                       Unfollow

@@ -37,38 +37,7 @@ const SignUp = () => {
           areaId: String(areaData[0]?.id ?? ''),
         }))
       } catch (error) {
-        const fallbackAreas: Area[] = [
-          {
-            id: 1,
-            name: 'Yaba',
-            city: 'Lagos',
-            current_status: 'OFF',
-            last_updated: new Date().toISOString(),
-          },
-          {
-            id: 2,
-            name: 'Ikeja',
-            city: 'Lagos',
-            current_status: 'ON',
-            last_updated: new Date().toISOString(),
-          },
-          {
-            id: 3,
-            name: 'Lekki',
-            city: 'Lagos',
-            current_status: 'ON',
-            last_updated: new Date().toISOString(),
-          },
-        ]
-
-        setAreas(fallbackAreas)
-        setFormData((currentData) => ({
-          ...currentData,
-          areaId: String(fallbackAreas[0].id),
-        }))
-        setAreaLoadingError(
-          'Could not load area locations. Using a seeded list instead.'
-        )
+        setAreaLoadingError('Unable to load area options from backend.')
         console.error(error)
       }
     }
@@ -209,7 +178,9 @@ const SignUp = () => {
             className="w-full rounded-xl border border-green-200 bg-white px-4 py-3"
           >
             <option value="" disabled>
-              Select your area
+              {areas.length === 0
+                ? 'Loading areas...'
+                : 'Select your area'}
             </option>
             {areas.map((area) => (
               <option key={area.id} value={String(area.id)}>

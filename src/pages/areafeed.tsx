@@ -18,6 +18,7 @@ type AreaFeedItem = {
   status: PowerStatus
   lastUpdatedLabel: string
   isFollowed: boolean
+  followId?: string
 }
 
 const initialAreas: AreaFeedItem[] = [
@@ -57,12 +58,16 @@ const getRelativeTime = (timestamp: string): string => {
   return `${diffDays} days ago`
 }
 
-const mapAreaToFeedItem = (area: Area, followedIds: Set<string>): AreaFeedItem => ({
+const mapAreaToFeedItem = (
+  area: Area,
+  followId?: string
+): AreaFeedItem => ({
   id: String(area.id),
   name: area.name,
   status: area.current_status,
   lastUpdatedLabel: getRelativeTime(area.last_updated),
-  isFollowed: followedIds.has(String(area.id)),
+  isFollowed: Boolean(followId),
+  followId,
 })
 
 const AreaFeed = () => {
@@ -70,29 +75,38 @@ const AreaFeed = () => {
   const [areas, setAreas] = useState<AreaFeedItem[]>(initialAreas)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
-  useEffect(() => {
-    const fetchAreas = async (): Promise<void> => {
-      setIsRefreshing(true)
+  const fetchAreas = async (): Promise<void> => {
+    setIsRefreshing(true)
 
-      try {
-        const [areaData, followData] = await Promise.all([
-          getAreas(),
-          getFollows().catch(() => []),
-        ])
+    try {
+      const [areaData, followData] = await Promise.all([
+        getAreas(),
+        getFollows().catch(() => []),
+      ])
 
-        const followedIds = new Set(
-          followData.map((follow) => String(follow.area_id ?? follow.area?.id ?? ''))
+      const followMap = new Map<string, string>()
+      followData.forEach((follow) => {
+        const areaId = String(follow.area_id ?? follow.area?.id ?? '')
+        const followId = String(follow.id ?? '')
+        if (areaId && followId) {
+          followMap.set(areaId, followId)
+        }
+      })
+
+      setAreas(
+        areaData.map((area) =>
+          mapAreaToFeedItem(area, followMap.get(String(area.id)))
         )
-
-        setAreas(areaData.map((area) => mapAreaToFeedItem(area, followedIds)))
-      } catch (error) {
-        console.error(error)
-        setAreas(initialAreas)
-      } finally {
-        setIsRefreshing(false)
-      }
+      )
+    } catch (error) {
+      console.error(error)
+      setAreas(initialAreas)
+    } finally {
+      setIsRefreshing(false)
     }
+  }
 
+  useEffect(() => {
     void fetchAreas()
 
     const intervalId = window.setInterval(() => {
@@ -116,9 +130,19 @@ const AreaFeed = () => {
 
     try {
       if (nextFollowState) {
-        await followArea(areaId)
+        const follow = await followArea(areaId)
+        setAreas((currentAreas) =>
+          currentAreas.map((area) =>
+            area.id === areaId
+              ? { ...area, isFollowed: true, followId: String(follow.id ?? '') }
+              : area
+          )
+        )
+        await fetchAreas()
       } else {
-        await unfollowArea(areaId)
+        const unfollowId = existingArea.followId ?? areaId
+        await unfollowArea(unfollowId)
+        await fetchAreas()
       }
     } catch (error) {
       setAreas((currentAreas) =>
