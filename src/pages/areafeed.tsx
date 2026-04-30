@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import {
+  followArea,
+  getAreas,
+  getFollows,
+  unfollowArea,
+} from '../api/power'
+import type { Area } from '../api/power'
 
 const REFRESH_INTERVAL_MS = 15000
 
@@ -13,7 +20,6 @@ type AreaFeedItem = {
   isFollowed: boolean
 }
 
-//TODO: Try...
 const initialAreas: AreaFeedItem[] = [
   {
     id: 'yaba',
@@ -38,7 +44,29 @@ const initialAreas: AreaFeedItem[] = [
   },
 ]
 
+const getRelativeTime = (timestamp: string): string => {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return 'Recently'
+
+  const diffMinutes = Math.floor((Date.now() - date.getTime()) / 60000)
+  if (diffMinutes < 1) return 'Just now'
+  if (diffMinutes < 60) return `${diffMinutes} mins ago`
+  const diffHours = Math.floor(diffMinutes / 60)
+  if (diffHours < 24) return `${diffHours} hours ago`
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays} days ago`
+}
+
+const mapAreaToFeedItem = (area: Area, followedIds: Set<string>): AreaFeedItem => ({
+  id: String(area.id),
+  name: area.name,
+  status: area.current_status,
+  lastUpdatedLabel: getRelativeTime(area.last_updated),
+  isFollowed: followedIds.has(String(area.id)),
+})
+
 const AreaFeed = () => {
+  const navigate = useNavigate()
   const [areas, setAreas] = useState<AreaFeedItem[]>(initialAreas)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
@@ -47,8 +75,19 @@ const AreaFeed = () => {
       setIsRefreshing(true)
 
       try {
-        // Replace this with GET /areas when the backend is ready.
-        setAreas((currentAreas) => currentAreas)
+        const [areaData, followData] = await Promise.all([
+          getAreas(),
+          getFollows().catch(() => []),
+        ])
+
+        const followedIds = new Set(
+          followData.map((follow) => String(follow.area_id ?? follow.area?.id ?? ''))
+        )
+
+        setAreas(areaData.map((area) => mapAreaToFeedItem(area, followedIds)))
+      } catch (error) {
+        console.error(error)
+        setAreas(initialAreas)
       } finally {
         setIsRefreshing(false)
       }
@@ -64,18 +103,31 @@ const AreaFeed = () => {
   }, [])
 
 
-  //Send it to the backend
   const handleFollow = async (areaId: string): Promise<void> => {
+    const existingArea = areas.find((area) => area.id === areaId)
+    if (!existingArea) return
+
+    const nextFollowState = !existingArea.isFollowed
     setAreas((currentAreas) =>
       currentAreas.map((area) =>
-        area.id === areaId
-          ? { ...area, isFollowed: !area.isFollowed }
-          : area
+        area.id === areaId ? { ...area, isFollowed: nextFollowState } : area
       )
     )
 
-    TODO:// Replace this with a backend call that saves followed areas to the user profile.
-    await Promise.resolve()
+    try {
+      if (nextFollowState) {
+        await followArea(areaId)
+      } else {
+        await unfollowArea(areaId)
+      }
+    } catch (error) {
+      setAreas((currentAreas) =>
+        currentAreas.map((area) =>
+          area.id === areaId ? { ...area, isFollowed: existingArea.isFollowed } : area
+        )
+      )
+      console.error(error)
+    }
   }
 
   return (
@@ -97,15 +149,14 @@ const AreaFeed = () => {
           areas.map((area) => (
             <div
               key={area.id}
-              className="rounded-xl border border-green-100 bg-white px-5 py-4 transition hover:border-green-300"
+              className="group rounded-xl border border-green-100 bg-white px-5 py-4 transition hover:border-green-300 hover:shadow-sm cursor-pointer"
+              onClick={() => navigate(`/areas/${area.id}`)}
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <Link to={`/areas/${area.id}`} className="inline-block">
-                    <p className="text-lg font-semibold text-green-950 hover:text-green-700">
-                      {area.name}
-                    </p>
-                  </Link>
+                  <p className="text-lg font-semibold text-green-950 group-hover:text-green-700">
+                    {area.name}
+                  </p>
 
                   <div className="mt-2 flex flex-wrap items-center gap-3">
                     <span
@@ -126,7 +177,10 @@ const AreaFeed = () => {
                 </div>
 
                 <button
-                  onClick={() => handleFollow(area.id)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void handleFollow(area.id)
+                  }}
                   className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                     area.isFollowed
                       ? 'border border-green-300 bg-white text-green-800 hover:bg-green-50'

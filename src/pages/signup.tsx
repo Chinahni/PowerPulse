@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import type {ChangeEvent} from 'react'
+import { useEffect, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { registerUser } from '../api/auth'
+import { getAreas } from '../api/power'
+import type { Area } from '../api/power'
 
 type FormData = {
   name: string
@@ -16,17 +18,70 @@ const SignUp = () => {
     name: '',
     email: '',
     password: '',
-    areaId: '1',
+    areaId: '',
   })
 
   const [emailError, setEmailError] = useState<string>('')
   const [formError, setFormError] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
+  const [areas, setAreas] = useState<Area[]>([])
+  const [areaLoadingError, setAreaLoadingError] = useState<string>('')
+
+  useEffect(() => {
+    const loadAreas = async (): Promise<void> => {
+      try {
+        const areaData = await getAreas()
+        setAreas(areaData)
+        setFormData((currentData) => ({
+          ...currentData,
+          areaId: String(areaData[0]?.id ?? ''),
+        }))
+      } catch (error) {
+        const fallbackAreas: Area[] = [
+          {
+            id: 1,
+            name: 'Yaba',
+            city: 'Lagos',
+            current_status: 'OFF',
+            last_updated: new Date().toISOString(),
+          },
+          {
+            id: 2,
+            name: 'Ikeja',
+            city: 'Lagos',
+            current_status: 'ON',
+            last_updated: new Date().toISOString(),
+          },
+          {
+            id: 3,
+            name: 'Lekki',
+            city: 'Lagos',
+            current_status: 'ON',
+            last_updated: new Date().toISOString(),
+          },
+        ]
+
+        setAreas(fallbackAreas)
+        setFormData((currentData) => ({
+          ...currentData,
+          areaId: String(fallbackAreas[0].id),
+        }))
+        setAreaLoadingError(
+          'Could not load area locations. Using a seeded list instead.'
+        )
+        console.error(error)
+      }
+    }
+
+    void loadAreas()
+  }, [])
 
   const isValidEmail = (email: string): boolean =>
     /^[^\s@]+@[^\s@]+\.com$/i.test(email)
 
-  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (
+    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     const { name, value } = event.target
     setFormError('')
 
@@ -48,15 +103,15 @@ const SignUp = () => {
     const name = formData.name.trim()
     const email = formData.email.trim()
     const password = formData.password
-    const areaId = Number(formData.areaId)
+    const areaId = formData.areaId.trim()
 
-    if (!name || !email || !password || !formData.areaId) {
+    if (!name || !email || !password || !areaId) {
       setFormError('Please fill in all fields')
       return
     }
 
-    if (!Number.isInteger(areaId) || areaId < 1) {
-      setFormError('Please enter a valid area ID')
+    if (!areas.some((area) => String(area.id) === areaId)) {
+      setFormError('Please select a valid area location')
       return
     }
 
@@ -142,18 +197,29 @@ const SignUp = () => {
           />
         </div>
 
-        {/* Area ID */}
+        {/* Area location */}
         <div>
-          <p className="mb-2 text-sm font-medium text-green-900">Area ID </p>
-          <input
+          <p className="mb-2 text-sm font-medium text-green-900">
+            Area location
+          </p>
+          <select
             name="areaId"
-            type="number"
-            placeholder='Location'
-            min="1"
             value={formData.areaId}
             onChange={handleChange}
-            className="w-full rounded-xl border border-green-200 px-4 py-3"
-          />
+            className="w-full rounded-xl border border-green-200 bg-white px-4 py-3"
+          >
+            <option value="" disabled>
+              Select your area
+            </option>
+            {areas.map((area) => (
+              <option key={area.id} value={String(area.id)}>
+                {area.name}, {area.city}
+              </option>
+            ))}
+          </select>
+          {areaLoadingError && (
+            <p className="mt-2 text-sm text-red-600">{areaLoadingError}</p>
+          )}
         </div>
 
         {/* Button */}

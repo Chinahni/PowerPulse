@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { getFollows, unfollowArea } from '../api/power'
 
 type PowerStatus = 'ON' | 'OFF'
 
@@ -30,11 +31,51 @@ const initialFollowedAreas: FollowedArea[] = [
 const FollowingPage = () => {
   const [followedAreas, setFollowedAreas] =
     useState<FollowedArea[]>(initialFollowedAreas)
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [loadError, setLoadError] = useState<string>('')
 
-  const handleUnfollow = (areaId: string): void => {
+  useEffect(() => {
+    const loadFollows = async (): Promise<void> => {
+      setIsLoading(true)
+      setLoadError('')
+
+      try {
+        const followData = await getFollows()
+        const formatted = followData
+          .map((follow) => follow.area)
+          .filter(Boolean)
+          .map((area) => ({
+            id: String(area.id),
+            name: area.name,
+            status: area.current_status,
+            lastUpdated: area.last_updated ?? 'Recently',
+          }))
+
+        setFollowedAreas(formatted)
+      } catch (error) {
+        console.error(error)
+        setLoadError('Could not load followed areas right now.')
+        setFollowedAreas(initialFollowedAreas)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    void loadFollows()
+  }, [])
+
+  const handleUnfollow = async (areaId: string): Promise<void> => {
+    const previousAreas = followedAreas
     setFollowedAreas((currentAreas) =>
       currentAreas.filter((area) => area.id !== areaId)
     )
+
+    try {
+      await unfollowArea(areaId)
+    } catch (error) {
+      console.error(error)
+      setFollowedAreas(previousAreas)
+    }
   }
 
   return (
@@ -47,66 +88,76 @@ const FollowingPage = () => {
         <p className="mt-1 text-sm text-green-800/70">
           Areas you are currently following.
         </p>
+        {loadError && (
+          <p className="mt-3 text-sm text-red-600">{loadError}</p>
+        )}
       </section>
 
-      {/* EMPTY STATE */}
-      {followedAreas.length === 0 ? (
-        <section className="rounded-2xl border border-green-100 bg-white p-6">
-          <p className="text-green-900">
-            You are not following any areas yet.
-          </p>
-
-          <Link
-            to="/areafeed"
-            className="mt-4 inline-block rounded-xl bg-green-700 px-4 py-3 font-semibold text-white transition hover:bg-green-800"
-          >
-            Browse areas
-          </Link>
+      {isLoading ? (
+        <section className="rounded-2xl border border-green-100 bg-white p-6 text-center text-green-900">
+          Loading followed areas...
         </section>
       ) : (
-        <section className="rounded-2xl border border-green-100 bg-white p-5">
-          <div className="grid gap-3">
-            {followedAreas.map((area) => (
-              <div
-                key={area.id}
-                className="group flex items-center justify-between gap-4 rounded-xl border border-green-100 bg-[#fcfffc] p-4 transition hover:border-green-300"
+        <>
+          {followedAreas.length === 0 ? (
+            <section className="rounded-2xl border border-green-100 bg-white p-6">
+              <p className="text-green-900">
+                You are not following any areas yet.
+              </p>
+
+              <Link
+                to="/areafeed"
+                className="mt-4 inline-block rounded-xl bg-green-700 px-4 py-3 font-semibold text-white transition hover:bg-green-800"
               >
-                {/* LEFT */}
-                <div>
-                  <Link to={`/areas/${area.id}`}>
-                    <p className="font-semibold text-green-950 group-hover:text-green-700">
-                      {area.name}
-                    </p>
-                  </Link>
+                Browse areas
+              </Link>
+            </section>
+          ) : (
+            <section className="rounded-2xl border border-green-100 bg-white p-5">
+              <div className="grid gap-3">
+                {followedAreas.map((area) => (
+                  <div
+                    key={area.id}
+                    className="group flex items-center justify-between gap-4 rounded-xl border border-green-100 bg-[#fcfffc] p-4 transition hover:border-green-300"
+                  >
+                    {/* LEFT */}
+                    <div>
+                      <Link to={`/areas/${area.id}`}>
+                        <p className="font-semibold text-green-950 group-hover:text-green-700">
+                          {area.name}
+                        </p>
+                      </Link>
 
-                  <div className="mt-1 flex items-center gap-3">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        area.status === 'ON'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
-                      }`}
+                      <div className="mt-1 flex items-center gap-3">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                            area.status === 'ON'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}
+                        >
+                          {area.status}
+                        </span>
+
+                        <p className="text-sm text-green-800/70">
+                          Updated {area.lastUpdated}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* RIGHT */}
+                    <button
+                      onClick={() => handleUnfollow(area.id)}
+                      className="rounded-xl border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-800 transition hover:bg-green-50"
                     >
-                      {area.status}
-                    </span>
-
-                    <p className="text-sm text-green-800/70">
-                      Updated {area.lastUpdated}
-                    </p>
+                      Unfollow
+                    </button>
                   </div>
-                </div>
-
-                {/* RIGHT */}
-                <button
-                  onClick={() => handleUnfollow(area.id)}
-                  className="rounded-xl border border-green-200 bg-white px-4 py-2 text-sm font-semibold text-green-800 transition hover:bg-green-50"
-                >
-                  Unfollow
-                </button>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
+            </section>
+          )}
+        </>
       )}
     </div>
   </main>
