@@ -103,14 +103,14 @@ const SignUp = () => {
     const name = formData.name.trim()
     const email = formData.email.trim()
     const password = formData.password
-    const areaId = formData.areaId.trim()
+    const areaId = Number(formData.areaId)
 
-    if (!name || !email || !password || !areaId) {
+    if (!name || !email || !password || !formData.areaId) {
       setFormError('Please fill in all fields')
       return
     }
 
-    if (!areas.some((area) => String(area.id) === areaId)) {
+    if (!Number.isInteger(areaId) || areaId < 1) {
       setFormError('Please select a valid area location')
       return
     }
